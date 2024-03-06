@@ -4,6 +4,8 @@ class HugeUploader {
     constructor(params) {
         this.endpoint = params.endpoint;
         this.file = params.file;
+        this.inputName = params.inputName || "file"
+        this.method = params.method || "POST"
         this.headers = params.headers || {};
         this.postParams = params.postParams;
         this.chunkSize = params.chunkSize || 10;
@@ -96,10 +98,10 @@ class HugeUploader {
         // send post fields on last request
         if (this.chunkCount + 1 === this.totalChunks && this.postParams) Object.keys(this.postParams).forEach(key => form.append(key, this.postParams[key]));
 
-        form.append('file', this.chunk);
+        form.append(this.inputName, this.chunk, this.file.name);
         this.headers['uploader-chunk-number'] = this.chunkCount;
 
-        return fetch(this.endpoint, { method: 'POST', headers: this.headers, body: form });
+        return fetch(this.endpoint, { method: this.method, headers: this.headers, body: form });
     }
 
     /**
@@ -127,14 +129,14 @@ class HugeUploader {
         .then((res) => {
             if (res.status === 200 || res.status === 201 || res.status === 204) {
                 if (++this.chunkCount < this.totalChunks) this._sendChunks();
-                else {
-                  res.text().then(body => {
-                    this._eventTarget.dispatchEvent(new CustomEvent('finish', { detail: body }));
-                  })
-                }
 
-                const percentProgress = Math.round((100 / this.totalChunks) * this.chunkCount);
-                this._eventTarget.dispatchEvent(new CustomEvent('progress', { detail: percentProgress }));
+                res.text().then(body => {
+                    if (this.chunkCount == this.totalChunks) {
+                        this._eventTarget.dispatchEvent(new CustomEvent('finish', { detail: { body: body }}));
+                    }
+                    const percentProgress = Math.round((100 / this.totalChunks) * this.chunkCount);
+                    this._eventTarget.dispatchEvent(new CustomEvent('progress', { detail: { body: body, progress: percentProgress }}));
+                })
             }
 
             // errors that might be temporary, wait a bit then retry
